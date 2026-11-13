@@ -1,0 +1,23 @@
+name: shift
+on:
+  schedule: [{ cron: '0 */6 * * *' }]
+  workflow_dispatch:
+concurrency: { group: shift, cancel-in-progress: false }
+permissions: {}
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - run: |
+          pip install -q openpyxl huggingface_hub > /dev/null
+          npm i -g omniroute@3.8.52 > /dev/null 2>&1
+          git clone -q https://github.com/tashfeenahmed/freellmapi.git ~/freellmapi
+          cd ~/freellmapi && git checkout -q 5127fee && npm ci > /dev/null 2>&1
+      - run: python3 -u runner.py
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          DATASET: ${{ secrets.DATASET }}
