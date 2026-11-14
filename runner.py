@@ -15,9 +15,12 @@ for s, d in [('omniroute/storage.sqlite', '.omniroute/storage.sqlite'), ('omniro
 for s in ['omni_skip_roles.txt', 'freellm_skip.txt']:   # roles finished or half-done on the laptop stay there
     with open(f'{T}/{s}', 'a', encoding='utf-8') as f: f.write('\n' + open(D + '/done_roles.txt', encoding='utf-8').read() + '\n')
 PART = int(os.environ.get('PART', 0))                   # two shifts run at once: part 1 writes roles from the other end
-if PART:
-    for s in ['omni_roles_top.txt', 'omni_roles_b.txt', 'freellm_roles.txt']:
-        rs = open(f'{T}/{s}', encoding='utf-8').read().split(chr(10)); open(f'{T}/{s}', 'w', encoding='utf-8').write(chr(10).join(rs[::-1]))
+TL = open(T + '/tl_roles.txt', encoding='utf-8').read().split(chr(10)) if os.path.exists(T + '/tl_roles.txt') else []
+for i, s in enumerate(['omni_roles_top.txt', 'omni_roles_b.txt', 'freellm_roles.txt']):   # team lead roles come last, after ours
+    rs = [r for r in open(f'{T}/{s}', encoding='utf-8').read().split(chr(10)) if r not in TL]
+    t = TL[i::3]
+    if PART: rs, t = rs[::-1], t[::-1]
+    open(f'{T}/{s}', 'w', encoding='utf-8').write(chr(10).join(rs)); open(f'{T}/tl.{i}.txt', 'w', encoding='utf-8').write(chr(10).join(t))
 MEMO = T + '/exhaustive_reviewed.json'                   # review scores of both parts, merged so neither redoes the other's work
 memo = {}
 for m in glob.glob(T + '/exhaustive_reviewed*.json'): memo.update(json.load(open(m)))
@@ -34,6 +37,7 @@ print('servers started', flush=True)
 
 
 idle = set()                                             # generator loops that found no role left to write
+tl_phase = []                                            # set once our roles are done: loops move on to team lead roles
 
 
 def run(env, args):
@@ -44,10 +48,14 @@ def loop(i, key, args):
     env = dict(os.environ, LLM_API_KEY=open(f'{T}/{key}').read().strip(), NO_PROXY='localhost,127.0.0.1')
     while time.time() < END - 900:
         t = time.time()
-        if len(idle) == len(jobs) and i == 0:          # every role written: one loop reviews, so files are never edited twice at once
+        if len(idle) == len(jobs) and i == 0 and not tl_phase:
+            tl_phase.append(1); idle.clear(); print('moving on to team lead roles', flush=True)
+        elif len(idle) == len(jobs) and i == 0:        # every role written: one loop reviews, so files are never edited twice at once
             run(env, ['--review', '--roles-file', T + '/all_roles.txt', '--workers', '6'])
         elif len(idle) < len(jobs):
-            run(env, args)
+            a = list(args)
+            if tl_phase: a[a.index('--roles-file') + 1] = f'{T}/tl.{i}.txt'
+            run(env, a)
             if time.time() - t < 120: idle.add(i); print('nothing left to write on loop', i, flush=True)
         time.sleep(30)
 
