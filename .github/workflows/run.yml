@@ -5,7 +5,7 @@ on:
 permissions: {}
 jobs:
   run:
-    strategy: { matrix: { part: [0, 1] } }          # two shifts at once, each takes half the work
+    strategy: { matrix: { part: [0, 1, 2] } }       # three shifts at once, each takes a share of the work
     concurrency: { group: 'shift-${{ matrix.part }}', cancel-in-progress: false }
     runs-on: ubuntu-latest
     timeout-minutes: 355

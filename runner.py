@@ -14,20 +14,21 @@ for s, d in [('omniroute/storage.sqlite', '.omniroute/storage.sqlite'), ('omniro
     os.makedirs(os.path.dirname(f'{H}/{d}'), exist_ok=True); shutil.copy(f'{D}/{s}', f'{H}/{d}')
 for s in ['omni_skip_roles.txt', 'freellm_skip.txt']:   # roles finished or half-done on the laptop stay there
     with open(f'{T}/{s}', 'a', encoding='utf-8') as f: f.write('\n' + open(D + '/done_roles.txt', encoding='utf-8').read() + '\n')
-PART = int(os.environ.get('PART', 0))                   # two shifts run at once: part 1 writes roles from the other end
+PART, N = int(os.environ.get('PART', 0)), 3              # three shifts at once: 0 from the top, 1 from the bottom, 2 from the middle
 TL = open(T + '/tl_roles.txt', encoding='utf-8').read().split(chr(10)) if os.path.exists(T + '/tl_roles.txt') else []
 for i, s in enumerate(['omni_roles_top.txt', 'omni_roles_b.txt', 'freellm_roles.txt']):   # team lead roles come last, after ours
     rs = [r for r in open(f'{T}/{s}', encoding='utf-8').read().split(chr(10)) if r not in TL]
     t = TL[i::3]
-    if PART: rs, t = rs[::-1], t[::-1]
+    if PART == 1: rs, t = rs[::-1], t[::-1]
+    if PART == 2: rs, t = rs[len(rs) // 2:] + rs[:len(rs) // 2], t[len(t) // 2:] + t[:len(t) // 2]
     open(f'{T}/{s}', 'w', encoding='utf-8').write(chr(10).join(rs)); open(f'{T}/tl.{i}.txt', 'w', encoding='utf-8').write(chr(10).join(t))
-MEMO = T + '/exhaustive_reviewed.json'                   # review scores of both parts, merged so neither redoes the other's work
+MEMO = T + '/exhaustive_reviewed.json'                   # review scores of all parts, merged so none redoes the other's work
 memo = {}
 for m in glob.glob(T + '/exhaustive_reviewed*.json'): memo.update(json.load(open(m)))
 json.dump(memo, open(MEMO, 'w'))
 sys.path.insert(0, T); from apply import parse
 with open(T + '/all_roles.txt', 'w', encoding='utf-8') as f:
-    f.write(chr(10).join(sorted({parse(f'{C}/{x}')[0] for x in os.listdir(C) if x.endswith('.txt')})[PART::2]))   # each part reviews half the roles
+    f.write(chr(10).join(sorted({parse(f'{C}/{x}')[0] for x in os.listdir(C) if x.endswith('.txt')})[PART::N]))   # each part reviews its share of the roles
 T0 = time.time()                                         # only files written or rewritten in this shift are uploaded
 log = open(H + '/run.log', 'a')
 subprocess.Popen('omniroute', shell=True, cwd=H, stdout=log, stderr=log)
