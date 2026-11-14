@@ -2,10 +2,11 @@ name: shift
 on:
   schedule: [{ cron: '0 */6 * * *' }]
   workflow_dispatch:
-concurrency: { group: shift, cancel-in-progress: false }
 permissions: {}
 jobs:
   run:
+    strategy: { matrix: { part: [0, 1] } }          # two shifts at once, each takes half the work
+    concurrency: { group: 'shift-${{ matrix.part }}', cancel-in-progress: false }
     runs-on: ubuntu-latest
     timeout-minutes: 355
     steps:
@@ -21,3 +22,4 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           DATASET: ${{ secrets.DATASET }}
+          PART: ${{ matrix.part }}

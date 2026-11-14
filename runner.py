@@ -1,7 +1,7 @@
 # One 5.5-hour shift: pull the private dataset, start OmniRoute + FreeLLMAPI, run the three generators,
 # push new content back every 20 minutes. When no role is left to write, the shift reviews every level instead
 # (a second model scores each question, under 8/10 is rewritten). Prints nothing but short status lines (this repo's logs are public).
-import os, sys, time, shutil, threading, subprocess
+import os, sys, glob, json, time, shutil, threading, subprocess
 from huggingface_hub import snapshot_download, upload_folder, upload_file
 
 H = os.path.expanduser('~'); REPO = os.environ['DATASET']; TOK = os.environ['HF_TOKEN']; END = time.time() + 5.4 * 3600
@@ -14,10 +14,17 @@ for s, d in [('omniroute/storage.sqlite', '.omniroute/storage.sqlite'), ('omniro
     os.makedirs(os.path.dirname(f'{H}/{d}'), exist_ok=True); shutil.copy(f'{D}/{s}', f'{H}/{d}')
 for s in ['omni_skip_roles.txt', 'freellm_skip.txt']:   # roles finished or half-done on the laptop stay there
     with open(f'{T}/{s}', 'a', encoding='utf-8') as f: f.write('\n' + open(D + '/done_roles.txt', encoding='utf-8').read() + '\n')
-MEMO = T + '/exhaustive_reviewed.json'
+PART = int(os.environ.get('PART', 0))                   # two shifts run at once: part 1 writes roles from the other end
+if PART:
+    for s in ['omni_roles_top.txt', 'omni_roles_b.txt', 'freellm_roles.txt']:
+        rs = open(f'{T}/{s}', encoding='utf-8').read().split(chr(10)); open(f'{T}/{s}', 'w', encoding='utf-8').write(chr(10).join(rs[::-1]))
+MEMO = T + '/exhaustive_reviewed.json'                   # review scores of both parts, merged so neither redoes the other's work
+memo = {}
+for m in glob.glob(T + '/exhaustive_reviewed*.json'): memo.update(json.load(open(m)))
+json.dump(memo, open(MEMO, 'w'))
 sys.path.insert(0, T); from apply import parse
 with open(T + '/all_roles.txt', 'w', encoding='utf-8') as f:
-    f.write(chr(10).join(sorted({parse(f'{C}/{x}')[0] for x in os.listdir(C) if x.endswith('.txt')})))
+    f.write(chr(10).join(sorted({parse(f'{C}/{x}')[0] for x in os.listdir(C) if x.endswith('.txt')})[PART::2]))   # each part reviews half the roles
 T0 = time.time()                                         # only files written or rewritten in this shift are uploaded
 log = open(H + '/run.log', 'a')
 subprocess.Popen('omniroute', shell=True, cwd=H, stdout=log, stderr=log)
@@ -56,7 +63,7 @@ def push():
     try:
         if os.path.isdir(C + '/.cache'): shutil.copytree(C + '/.cache', B + '/cache', dirs_exist_ok=True)
         new = [f for f in os.listdir(C) if f.endswith('.txt') and os.path.getmtime(f'{C}/{f}') > T0]
-        if os.path.exists(MEMO): upload_file(path_or_fileobj=MEMO, path_in_repo='bank/tools/exhaustive_reviewed.json', repo_id=REPO, repo_type='dataset', token=TOK)
+        if os.path.exists(MEMO): upload_file(path_or_fileobj=MEMO, path_in_repo=f'bank/tools/exhaustive_reviewed.{PART}.json', repo_id=REPO, repo_type='dataset', token=TOK)
         if new: upload_folder(repo_id=REPO, repo_type='dataset', token=TOK, folder_path=C, path_in_repo='bank/content',
                               allow_patterns=new, commit_message='cloud sync')
         if os.path.isdir(B + '/cache'): upload_folder(repo_id=REPO, repo_type='dataset', token=TOK, folder_path=B + '/cache',
