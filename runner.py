@@ -16,9 +16,14 @@ for s in ['omni_skip_roles.txt', 'freellm_skip.txt']:   # roles finished or half
     with open(f'{T}/{s}', 'a', encoding='utf-8') as f: f.write('\n' + open(D + '/done_roles.txt', encoding='utf-8').read() + '\n')
 PART, N = int(os.environ.get('PART', 0)), 3              # three shifts at once: 0 from the top, 1 from the bottom, 2 from the middle
 TL = open(T + '/tl_roles.txt', encoding='utf-8').read().split(chr(10)) if os.path.exists(T + '/tl_roles.txt') else []
-for i, s in enumerate(['omni_roles_top.txt', 'omni_roles_b.txt', 'freellm_roles.txt']):   # team lead roles come last, after ours
+CO = os.path.exists(T + '/coarena_key.txt')               # Coarena key: a fourth loop takes the back half of list b
+if CO:
+    rs = open(T + '/omni_roles_b.txt', encoding='utf-8').read().split(chr(10)); h = len(rs) // 2
+    open(T + '/omni_roles_b.txt', 'w', encoding='utf-8').write(chr(10).join(rs[:h])); open(T + '/coarena_roles.txt', 'w', encoding='utf-8').write(chr(10).join(rs[h:]))
+Q = ['omni_roles_top.txt', 'omni_roles_b.txt', 'freellm_roles.txt'] + ['coarena_roles.txt'] * CO
+for i, s in enumerate(Q):                                # team lead roles come last, after ours
     rs = [r for r in open(f'{T}/{s}', encoding='utf-8').read().split(chr(10)) if r not in TL]
-    t = TL[i::3]
+    t = TL[i::len(Q)]
     if PART == 1: rs, t = rs[::-1], t[::-1]
     if PART == 2: rs, t = rs[len(rs) // 2:] + rs[:len(rs) // 2], t[len(t) // 2:] + t[:len(t) // 2]
     open(f'{T}/{s}', 'w', encoding='utf-8').write(chr(10).join(rs)); open(f'{T}/tl.{i}.txt', 'w', encoding='utf-8').write(chr(10).join(t))
@@ -52,7 +57,9 @@ def loop(i, key, args):
         if len(idle) == len(jobs) and i == 0 and not tl_phase:
             tl_phase.append(1); idle.clear(); print('moving on to team lead roles', flush=True)
         elif len(idle) == len(jobs) and i == 0:        # every role written: one loop reviews, so files are never edited twice at once
-            run(env, ['--review', '--roles-file', T + '/all_roles.txt', '--workers', '6'])
+            if CO: run(dict(env, LLM_API_KEY=open(T + '/coarena_key.txt').read().strip()), ['--review', '--base-url', 'https://coarena.ai/api/v1',
+                       '--model', 'gemini-4-argon,gpt-6-1-sol', '--roles-file', T + '/all_roles.txt', '--workers', '6'])   # strongest model checks
+            else: run(env, ['--review', '--roles-file', T + '/all_roles.txt', '--workers', '6'])
         elif len(idle) < len(jobs):
             a = list(args)
             if tl_phase: a[a.index('--roles-file') + 1] = f'{T}/tl.{i}.txt'
@@ -65,6 +72,8 @@ jobs = [('omniroute_key.txt', ['--roles-file', T + '/omni_roles_top.txt', '--ski
         ('omniroute_key.txt', ['--roles-file', T + '/omni_roles_b.txt', '--skip-file', T + '/omni_skip_roles.txt', '--limit', '8', '--workers', '4']),
         ('freellm_key.txt', ['--base-url', 'http://127.0.0.1:3001/v1', '--model', 'auto', '--roles-file', T + '/freellm_roles.txt',
                              '--skip-file', T + '/freellm_skip.txt', '--limit', '100', '--workers', '4'])]
+if CO: jobs.append(('coarena_key.txt', ['--base-url', 'https://coarena.ai/api/v1', '--model', 'gpt-6-1-sol,gemini-4-argon,kimi-k3-1-pro',
+                                         '--roles-file', T + '/coarena_roles.txt', '--skip-file', T + '/omni_skip_roles.txt', '--limit', '100', '--workers', '4']))
 for i, (key, args) in enumerate(jobs): threading.Thread(target=loop, args=(i, key, args), daemon=True).start()
 
 
