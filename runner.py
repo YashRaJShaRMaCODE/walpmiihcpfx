@@ -20,20 +20,22 @@ CO = os.path.exists(T + '/coarena_key.txt')               # Coarena key: a fourt
 if CO:
     rs = open(T + '/omni_roles_b.txt', encoding='utf-8').read().split(chr(10)); h = len(rs) // 2
     open(T + '/omni_roles_b.txt', 'w', encoding='utf-8').write(chr(10).join(rs[:h])); open(T + '/coarena_roles.txt', 'w', encoding='utf-8').write(chr(10).join(rs[h:]))
+sys.path.insert(0, T); from apply import parse
+S = {parse(f'{C}/{x}')[0] for x in os.listdir(C) if x.endswith('.txt')}   # roles with some levels already written go first
 Q = ['omni_roles_top.txt', 'omni_roles_b.txt', 'freellm_roles.txt'] + ['coarena_roles.txt'] * CO
 for i, s in enumerate(Q):                                # team lead roles come last, after ours
     rs = [r for r in open(f'{T}/{s}', encoding='utf-8').read().split(chr(10)) if r not in TL]
     t = TL[i::len(Q)]
     if PART == 1: rs, t = rs[::-1], t[::-1]
     if PART == 2: rs, t = rs[len(rs) // 2:] + rs[:len(rs) // 2], t[len(t) // 2:] + t[:len(t) // 2]
+    rs, t = sorted(rs, key=lambda r: r not in S), sorted(t, key=lambda r: r not in S)
     open(f'{T}/{s}', 'w', encoding='utf-8').write(chr(10).join(rs)); open(f'{T}/tl.{i}.txt', 'w', encoding='utf-8').write(chr(10).join(t))
 MEMO = T + '/exhaustive_reviewed.json'                   # review scores of all parts, merged so none redoes the other's work
 memo = {}
 for m in glob.glob(T + '/exhaustive_reviewed*.json'): memo.update(json.load(open(m)))
 json.dump(memo, open(MEMO, 'w'))
-sys.path.insert(0, T); from apply import parse
 with open(T + '/all_roles.txt', 'w', encoding='utf-8') as f:
-    f.write(chr(10).join(sorted({parse(f'{C}/{x}')[0] for x in os.listdir(C) if x.endswith('.txt')})[PART::N]))   # each part reviews its share of the roles
+    f.write(chr(10).join(sorted(S)[PART::N]))   # each part reviews its share of the roles
 T0 = time.time()                                         # only files written or rewritten in this shift are uploaded
 log = open(H + '/run.log', 'a')
 subprocess.Popen('omniroute', shell=True, cwd=H, stdout=log, stderr=log)
