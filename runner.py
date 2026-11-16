@@ -85,6 +85,7 @@ def push():
         new = [f for f in os.listdir(C) if f.endswith('.txt') and os.path.getmtime(f'{C}/{f}') > T0]
         ops = [Add(f'bank/content/{f}', f'{C}/{f}') for f in new]          # one commit per sync: HF rate-limits many small commits
         if os.path.exists(MEMO): ops.append(Add(f'bank/tools/exhaustive_reviewed.{PART}.json', MEMO))
+        log.flush(); ops.append(Add(f'logs/run.{PART}.log', open(H + '/run.log', 'rb').read()[-200000:]))   # private dataset only: shows why loops fail
         for d, _, fs in os.walk(B + '/cache'):
             ops += [Add('bank/cache/' + os.path.relpath(f'{d}/{f}', B + '/cache').replace(os.sep, '/'), f'{d}/{f}') for f in fs]
         if ops: create_commit(repo_id=REPO, repo_type='dataset', token=TOK, operations=ops, commit_message=f'cloud sync {PART}')
