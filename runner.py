@@ -2,7 +2,7 @@
 # push new content back every 20 minutes. When no role is left to write, the shift reviews every level instead
 # (a second model scores each question, under 8/10 is rewritten). Prints nothing but short status lines (this repo's logs are public).
 import os, sys, glob, json, time, shutil, threading, subprocess
-from huggingface_hub import snapshot_download, upload_folder, upload_file
+from huggingface_hub import snapshot_download, create_commit, CommitOperationAdd as Add
 
 H = os.path.expanduser('~'); REPO = os.environ['DATASET']; TOK = os.environ['HF_TOKEN']; END = time.time() + 5.4 * 3600
 D = snapshot_download(REPO, repo_type='dataset', token=TOK, local_dir=H + '/pack')
@@ -83,16 +83,16 @@ def push():
     try:
         if os.path.isdir(C + '/.cache'): shutil.copytree(C + '/.cache', B + '/cache', dirs_exist_ok=True)
         new = [f for f in os.listdir(C) if f.endswith('.txt') and os.path.getmtime(f'{C}/{f}') > T0]
-        if os.path.exists(MEMO): upload_file(path_or_fileobj=MEMO, path_in_repo=f'bank/tools/exhaustive_reviewed.{PART}.json', repo_id=REPO, repo_type='dataset', token=TOK)
-        if new: upload_folder(repo_id=REPO, repo_type='dataset', token=TOK, folder_path=C, path_in_repo='bank/content',
-                              allow_patterns=new, commit_message='cloud sync')
-        if os.path.isdir(B + '/cache'): upload_folder(repo_id=REPO, repo_type='dataset', token=TOK, folder_path=B + '/cache',
-                                                      path_in_repo='bank/cache', commit_message='cloud sync')
+        ops = [Add(f'bank/content/{f}', f'{C}/{f}') for f in new]          # one commit per sync: HF rate-limits many small commits
+        if os.path.exists(MEMO): ops.append(Add(f'bank/tools/exhaustive_reviewed.{PART}.json', MEMO))
+        for d, _, fs in os.walk(B + '/cache'):
+            ops += [Add('bank/cache/' + os.path.relpath(f'{d}/{f}', B + '/cache').replace(os.sep, '/'), f'{d}/{f}') for f in fs]
+        if ops: create_commit(repo_id=REPO, repo_type='dataset', token=TOK, operations=ops, commit_message=f'cloud sync {PART}')
         print(f'synced, {len(new)} new or reviewed level files this shift', flush=True)
     except Exception as e:
         print('sync failed:', type(e).__name__, flush=True)
 
 
 while time.time() < END:
-    time.sleep(min(1200, max(1, END - time.time()))); push()
+    time.sleep(min(3600, max(1, END - time.time()))); push()
 sys.exit(0)
