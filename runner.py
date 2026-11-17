@@ -16,7 +16,7 @@ for s in ['omni_skip_roles.txt', 'freellm_skip.txt']:   # roles finished or half
     with open(f'{T}/{s}', 'a', encoding='utf-8') as f: f.write('\n' + open(D + '/done_roles.txt', encoding='utf-8').read() + '\n')
 PART, N = int(os.environ.get('PART', 0)), 3              # three shifts at once: 0 from the top, 1 from the bottom, 2 from the middle
 TL = open(T + '/tl_roles.txt', encoding='utf-8').read().split(chr(10)) if os.path.exists(T + '/tl_roles.txt') else []
-CO = os.path.exists(T + '/coarena_key.txt')               # Coarena key: a fourth loop takes the back half of list b
+CO = PART == 0 and os.path.exists(T + '/coarena_key.txt')   # Coarena free tier allows 2 requests at a time per account: only part 0 uses it
 if CO:
     rs = open(T + '/omni_roles_b.txt', encoding='utf-8').read().split(chr(10)); h = len(rs) // 2
     open(T + '/omni_roles_b.txt', 'w', encoding='utf-8').write(chr(10).join(rs[:h])); open(T + '/coarena_roles.txt', 'w', encoding='utf-8').write(chr(10).join(rs[h:]))
@@ -60,7 +60,7 @@ def loop(i, key, args):
             tl_phase.append(1); idle.clear(); print('moving on to team lead roles', flush=True)
         elif len(idle) == len(jobs) and i == 0:        # every role written: one loop reviews, so files are never edited twice at once
             if CO: run(dict(env, LLM_API_KEY=open(T + '/coarena_key.txt').read().strip()), ['--review', '--base-url', 'https://coarena.ai/api/v1',
-                       '--model', 'gpt-6-luna,gemini-3-8-flash', '--roles-file', T + '/all_roles.txt', '--workers', '6'])   # free tier models only: paid ones return 402
+                       '--model', 'gpt-6-luna,gemini-3-8-flash', '--roles-file', T + '/all_roles.txt', '--workers', '2'])   # free tier models only: paid ones return 402
             else: run(env, ['--review', '--roles-file', T + '/all_roles.txt', '--workers', '6'])
         elif len(idle) < len(jobs):
             a = list(args)
@@ -75,7 +75,7 @@ jobs = [('omniroute_key.txt', ['--roles-file', T + '/omni_roles_top.txt', '--ski
         ('freellm_key.txt', ['--base-url', 'http://127.0.0.1:3001/v1', '--model', 'auto', '--roles-file', T + '/freellm_roles.txt',
                              '--skip-file', T + '/freellm_skip.txt', '--limit', '100', '--workers', '4'])]
 if CO: jobs.append(('coarena_key.txt', ['--base-url', 'https://coarena.ai/api/v1', '--model', 'gpt-6-luna,gemini-3-8-flash,deepseek-v4-1-flash-1017',
-                                         '--roles-file', T + '/coarena_roles.txt', '--skip-file', T + '/omni_skip_roles.txt', '--limit', '100', '--workers', '4']))
+                                         '--roles-file', T + '/coarena_roles.txt', '--skip-file', T + '/omni_skip_roles.txt', '--limit', '100', '--workers', '2']))
 for i, (key, args) in enumerate(jobs): threading.Thread(target=loop, args=(i, key, args), daemon=True).start()
 
 
