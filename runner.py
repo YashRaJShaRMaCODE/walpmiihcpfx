@@ -45,7 +45,7 @@ print('servers started', flush=True)
 
 
 idle = set()                                             # generator loops that found no role left to write
-tl_phase = []                                            # set once our roles are done: loops move on to team lead roles
+tl_phase = set()                                         # loops whose own roles are done: each moves on to team lead roles alone
 
 
 def run(env, args):
@@ -56,15 +56,15 @@ def loop(i, key, args):
     env = dict(os.environ, LLM_API_KEY=open(f'{T}/{key}').read().strip(), NO_PROXY='localhost,127.0.0.1')
     while time.time() < END - 900:
         t = time.time()
-        if len(idle) == len(jobs) and i == 0 and not tl_phase:
-            tl_phase.append(1); idle.clear(); print('moving on to team lead roles', flush=True)
+        if i in idle and i not in tl_phase:            # no waiting on slower loops: a free loop starts its team lead share now
+            tl_phase.add(i); idle.discard(i); print('moving on to team lead roles on loop', i, flush=True)
         elif len(idle) == len(jobs) and i == 0:        # every role written: one loop reviews, so files are never edited twice at once
             if CO: run(dict(env, LLM_API_KEY=open(T + '/coarena_key.txt').read().strip()), ['--review', '--base-url', 'https://coarena.ai/api/v1',
                        '--model', 'gpt-6-luna,gemini-3-8-flash', '--roles-file', T + '/all_roles.txt', '--workers', '2'])   # free tier models only: paid ones return 402
             else: run(env, ['--review', '--roles-file', T + '/all_roles.txt', '--workers', '6'])
-        elif len(idle) < len(jobs):
+        elif i not in idle:
             a = list(args)
-            if tl_phase: a[a.index('--roles-file') + 1] = f'{T}/tl.{i}.txt'
+            if i in tl_phase: a[a.index('--roles-file') + 1] = f'{T}/tl.{i}.txt'
             run(env, a)
             if time.time() - t < 120: idle.add(i); print('nothing left to write on loop', i, flush=True)
         time.sleep(30)
