@@ -5,7 +5,11 @@ import os, sys, glob, json, time, shutil, threading, subprocess
 from huggingface_hub import snapshot_download, create_commit, CommitOperationAdd as Add
 
 H = os.path.expanduser('~'); REPO = os.environ['DATASET']; TOK = os.environ['HF_TOKEN']; END = time.time() + 5.4 * 3600
-D = snapshot_download(REPO, repo_type='dataset', token=TOK, local_dir=H + '/pack')
+for i in range(6):                                       # HF rate-limits big pulls: few at a time, resume on failure
+    try: D = snapshot_download(REPO, repo_type='dataset', token=TOK, local_dir=H + '/pack', max_workers=2); break
+    except Exception:
+        if i == 5: raise
+        print('pull failed, retrying', flush=True); time.sleep(120)
 B = D + '/bank'; T = B + '/tools'; C = B + '/content'
 os.makedirs(C, exist_ok=True)
 if os.path.isdir(B + '/cache'): shutil.copytree(B + '/cache', C + '/.cache', dirs_exist_ok=True)   # half-done levels from the last shift
